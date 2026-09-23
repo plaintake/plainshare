@@ -3,7 +3,10 @@ import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlit
 /**
  * A producer is an uploading tool (PlainTake today, other captioned-video tools
  * later). The bearer key is never stored — only sha256(key) — and lookups go
- * through the unique keyHash index, so the index compare is the compare.
+ * through the unique keyHash index, so the index compare is the compare. A lost
+ * key is re-issued on the same row by the admin (see
+ * src/routes/api/producers.$slug.reissue.ts) — the UPDATE overwrites the hash,
+ * which revokes the old key, and stamps `rotatedAt`.
  */
 export const producers = sqliteTable('producers', {
   id: text('id').primaryKey(),
@@ -15,6 +18,8 @@ export const producers = sqliteTable('producers', {
   createdAt: integer('created_at', { mode: 'timestamp_ms' })
     .notNull()
     .$defaultFn(() => new Date()),
+  /** Set when the key was last re-issued (admin rotation); null = never rotated. */
+  rotatedAt: integer('rotated_at', { mode: 'timestamp_ms' }),
 })
 
 /**

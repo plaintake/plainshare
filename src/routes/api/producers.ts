@@ -1,11 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { env } from 'cloudflare:workers'
 import { db } from '@/db'
 import { producers } from '@/db/schema'
 import { errorJson, json } from '@/lib/api.server'
-import { sha256Hex } from '@/lib/auth.server'
+import { randomHex, requireAdmin, sha256Hex } from '@/lib/auth.server'
 
 const CreateProducerSchema = z.object({
   name: z.string().min(1).max(100),
@@ -15,28 +14,19 @@ const CreateProducerSchema = z.object({
   homepageUrl: z.url().optional(),
 })
 
-function randomHex(bytes: number): string {
-  const raw = crypto.getRandomValues(new Uint8Array(bytes))
-  return [...raw].map((byte) => byte.toString(16).padStart(2, '0')).join('')
-}
-
 /**
- * The whole producer lifecycle for v1: an admin (holding ADMIN_TOKEN) registers
- * a producer and receives its bearer key exactly once — only sha256(key) is
- * stored, so a lost key means minting a new producer row.
+ * Producer creation: an admin (holding ADMIN_TOKEN) registers a producer and
+ * receives its bearer key exactly once — only sha256(key) is stored. A lost key
+ * is re-issued on the same row by the admin via POST /api/producers/$slug/reissue
+ * (see producers.$slug.reissue.ts); `me` (producers.me.ts) is how a key holder
+ * proves its key without uploading anything.
  */
 export const Route = createFileRoute('/api/producers')({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const adminToken = env.ADMIN_TOKEN
-        if (adminToken === undefined || adminToken === '') {
-          return errorJson('not-configured', 500)
-        }
-        const presented = request.headers.get('x-admin-token')
-        if (presented === null || (await sha256Hex(presented)) !== (await sha256Hex(adminToken))) {
-          return errorJson('unauthorized', 401)
-        }
+        const gate = await requireAdmin(request)
+        if (gate !== null) return gate
 
         let body: unknown
         try {

@@ -1,0 +1,1 @@
+ALTER TABLE `producers` ADD `rotated_at` integer;

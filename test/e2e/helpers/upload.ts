@@ -89,7 +89,7 @@ export async function adminToken(): Promise<string> {
   return match[1]!.trim()
 }
 
-export type Producer = { key: string }
+export type Producer = { key: string; slug: string }
 
 export async function createProducer(base: string, slug: string): Promise<Producer> {
   const response = await fetch(`${base}/api/producers`, {
@@ -102,6 +102,17 @@ export async function createProducer(base: string, slug: string): Promise<Produc
     return createProducer(base, `${slug}-${Date.now()}`)
   }
   if (!response.ok) throw new Error(`producer create failed: ${response.status}`)
+  // The parsed slug, not the asked-for one: a 409 retry above may have renamed it.
+  return (await response.json()) as Producer
+}
+
+/** Admin key rotation: same row, fresh key. A 404 here is a bug, not contention. */
+export async function rotateProducerKey(base: string, slug: string): Promise<Producer> {
+  const response = await fetch(`${base}/api/producers/${slug}/reissue`, {
+    method: 'POST',
+    headers: { 'x-admin-token': await adminToken() },
+  })
+  if (!response.ok) throw new Error(`key reissue failed: ${response.status}`)
   return (await response.json()) as Producer
 }
 

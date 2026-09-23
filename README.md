@@ -46,6 +46,8 @@ All API routes live under `/api`. Producers authenticate with a bearer key:
 | `GET` | `/api/ping` | health check |
 | `GET` | `/api/version` | service version |
 | `POST` | `/api/producers` | create producer + key (admin-gated) |
+| `POST` | `/api/producers/:slug/reissue` | re-issue a producer's key, same row (admin-gated) |
+| `GET` | `/api/producers/me` | who a bearer key resolves to — verify without uploading |
 | `HEAD` | `/api/videos/:id` | exists? 200 / 404 — dedup probe |
 | `GET` | `/api/videos/:id` | metadata (title, dimensions, views, producer, …) |
 | `PUT` | `/api/videos/:id` | upload the MP4 |
@@ -67,6 +69,28 @@ curl -X POST http://localhost:8787/api/producers \
 
 `201 {"id":…,"slug":"plaintake","key":"sk_…"}` — the key is shown **exactly
 once**; only its hash is stored. `slug` must match `^[a-z0-9][a-z0-9-]{0,39}$`.
+
+### Rotate a producer key (admin)
+
+A lost or leaked key is re-issued **on the same row** — same id, slug and
+ownership of every video it uploaded; no duplicate producers:
+
+```sh
+curl -X POST http://localhost:8787/api/producers/plainshare/reissue \
+  -H "X-Admin-Token: $ADMIN_TOKEN"
+```
+
+`200 {"id":…,"slug":…,"name":…,"key":"sk_…"}` — the new key is shown **exactly
+once**. The old key stops working immediately: only its hash was stored, and the
+hash is gone. `rotated_at` records when. Prove a key (new or stored) without
+uploading anything:
+
+```sh
+curl http://localhost:8787/api/producers/me \
+  -H "Authorization: Bearer $KEY"
+```
+
+`200 {"id":…,"slug":…,"name":…}` when the key resolves, `401` when it does not.
 
 ### Upload a video
 
@@ -172,7 +196,10 @@ pnpm deploy
 ```
 
 Then create a production producer exactly as above (with the production
-`ADMIN_TOKEN`) and hand the key to your publisher.
+`ADMIN_TOKEN`) and hand the key to your publisher. A lost production key is
+rotated in place — see "Rotate a producer key" — instead of re-registering.
+When `migrations/` gains files, run `pnpm db:migrate:remote` **before**
+`pnpm deploy`.
 
 ## Repository layout
 
@@ -189,6 +216,8 @@ test/e2e/             Playwright suite (real ffmpeg clips)
 ## Security notes
 
 - Producer keys: `sk_<24 hex>`; stored only as sha256; looked up by hash.
+  Rotation overwrites the hash, so the old key dies instantly; `rotated_at`
+  records when it happened.
 - IDs are validated (`^[a-z2-7]{26}$`) before any storage key is built — no
   path injection through `:id`.
 - Uploads capped at 2 GiB; sidecar parts at 2 MB each / 5 MB total.
