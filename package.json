@@ -1,0 +1,42 @@
+{
+  "name": "plainshare",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Share captioned, chaptered MP4 videos with a content-addressed link.",
+  "scripts": {
+    "dev": "vite dev --port 8787",
+    "build": "vite build",
+    "deploy": "pnpm run build && wrangler deploy",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit",
+    "cf-typegen": "wrangler types",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote"
+  },
+  "dependencies": {
+    "@tanstack/react-router": "^1.170.17",
+    "@tanstack/react-start": "^1.168.27",
+    "drizzle-orm": "^0.45.2",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.43.1",
+    "@playwright/test": "^1.50.0",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "drizzle-kit": "^0.31.10",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.4",
+    "vitest": "^4.0.0",
+    "wrangler": "^4.107.1"
+  },
+  "license": "MIT"
+}
