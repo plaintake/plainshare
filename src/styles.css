@@ -1,4 +1,11 @@
+/*
+ * Two palettes over one set of tokens. Dark is the default — PlainShare's own
+ * look, and what a visitor with no preference (or no JS) gets. The inline
+ * script in the root route's head sets <html data-theme> before first paint,
+ * so the light palette below is what `data-theme="light"` resolves to.
+ */
 :root {
+  color-scheme: dark;
   --bg: #101010;
   --surface: #1a1a1a;
   --surface-raised: #242424;
@@ -7,6 +14,18 @@
   --text-dim: #9a9a9a;
   --accent: #8ab4f8;
   --accent-dim: rgba(138, 180, 248, 0.14);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #f6f7f9;
+  --surface-raised: #eceef1;
+  --border: #dfe1e6;
+  --text: #1b1e24;
+  --text-dim: #5b616e;
+  --accent: #0b57d0;
+  --accent-dim: rgba(11, 87, 208, 0.1);
 }
 
 * {
@@ -217,4 +236,40 @@ a:hover {
 
 .chapter-title {
   font-weight: 500;
+}
+
+/*
+ * A fixed corner control, in the same class as a "back to top" button:
+ * theming is a visitor convenience, not part of watching a video, so it stays
+ * out of the page's flow. Bottom-left specifically — the right edge belongs
+ * to the side panels (Chapters above Transcript) all the way down the share
+ * page, while the left column ends after the meta row, leaving this corner
+ * empty on every page.
+ */
+.theme-toggle {
+  position: fixed;
+  bottom: 14px;
+  left: 16px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
