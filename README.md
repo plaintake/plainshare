@@ -58,7 +58,7 @@ All API routes live under `/api`. Producers authenticate with a bearer key:
 curl -X POST http://localhost:8787/api/producers \
   -H "X-Admin-Token: $ADMIN_TOKEN" \
   -H 'content-type: application/json' \
-  -d '{"name":"PlainTake","slug":"plaintake","homepageUrl":"https://plaintake.dev"}'
+  -d '{"name":"PlainTake","slug":"plaintake","homepageUrl":"https://plaintake.github.io"}'
 ```
 
 `201 {"id":…,"slug":"plaintake","key":"sk_…"}` — the key is shown **exactly
@@ -135,6 +135,10 @@ pnpm db:migrate:local                   # apply D1 migrations
 pnpm dev                                # http://localhost:8787
 ```
 
+Local dev runs on miniflare — no Cloudflare account needed, and the committed
+`wrangler.jsonc` works as-is: locally its `database_id` is just a state key.
+You swap in your own only to deploy (below).
+
 Local state (D1 + R2) lives under `.wrangler/state`; delete it and re-run
 migrations for a clean slate.
 
@@ -150,9 +154,14 @@ ffmpeg-generated clips, so it exercises actual seeking, not stubs.
 
 ## Deploying
 
+`wrangler.jsonc` in this repo is wired to the PlainLab deployment — a D1
+`database_id` belongs to the account that created the database. Run your own
+from the template:
+
 ```sh
+cp wrangler.jsonc.example wrangler.jsonc  # then paste in your database_id
 wrangler r2 bucket create share-media
-wrangler d1 create share-db             # paste database_id into wrangler.jsonc
+wrangler d1 create share-db              # prints the id → wrangler.jsonc
 wrangler secret put ADMIN_TOKEN
 pnpm db:migrate:remote
 pnpm deploy

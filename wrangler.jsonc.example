@@ -1,0 +1,39 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	// Template for deploying your own PlainShare. The repo's wrangler.jsonc is
+	// wired to the PlainLab deployment, and a D1 database_id is specific to the
+	// account that created the database — so start from a copy of this file:
+	//
+	//   cp wrangler.jsonc.example wrangler.jsonc
+	//   wrangler r2 bucket create share-media
+	//   wrangler d1 create share-db      → prints the id, paste it below
+	//   wrangler secret put ADMIN_TOKEN
+	//   pnpm db:migrate:remote && pnpm deploy
+	"name": "plainshare",
+	"main": "@tanstack/react-start/server-entry",
+	"compatibility_date": "2026-09-01",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"observability": {
+		"enabled": true
+	},
+	"upload_source_maps": true,
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "share-db",
+			"migrations_dir": "migrations",
+			// Paste the id `wrangler d1 create share-db` printed. Left as a
+			// placeholder, dev and deploy fail loudly here rather than quietly
+			// auto-provisioning a fresh database.
+			"database_id": "<your-d1-database-id>"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "BUCKET",
+			"bucket_name": "share-media"
+		}
+	]
+}

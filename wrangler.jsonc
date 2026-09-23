@@ -1,28 +1,30 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  // PlainShare: generic video sharing worker. See README.md for provisioning.
-  "name": "plainshare",
-  "main": "@tanstack/react-start/server-entry",
-  "compatibility_date": "2026-09-01",
-  "compatibility_flags": ["nodejs_compat"],
-  "observability": {
-    "enabled": true
-  },
-  "upload_source_maps": true,
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "share-db",
-      "migrations_dir": "migrations"
-      // After `wrangler d1 create share-db`, paste the id here so deploys target
-      // a stable database instead of auto-provisioning a new one.
-      // "database_id": "..."
-    }
-  ],
-  "r2_buckets": [
-    {
-      "binding": "BUCKET",
-      "bucket_name": "share-media"
-    }
-  ]
+	"$schema": "node_modules/wrangler/config-schema.json",
+	// PlainShare: generic video sharing worker. This copy is the PlainLab
+	// deployment — other accounts start from wrangler.jsonc.example.
+	// See README.md for provisioning.
+	"name": "plainshare",
+	"main": "@tanstack/react-start/server-entry",
+	"compatibility_date": "2026-09-01",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"observability": {
+		"enabled": true
+	},
+	"upload_source_maps": true,
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "share-db",
+			"migrations_dir": "migrations",
+			"database_id": "0cb10998-f6f7-4a5e-8d90-58a484d82a35"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "BUCKET",
+			"bucket_name": "share-media"
+		}
+	]
 }
