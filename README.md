@@ -12,6 +12,10 @@ can reuse it unchanged.
 Built with TanStack Start on Cloudflare Workers (R2 for media, D1 for
 metadata).
 
+## Example
+
+https://plainshare.plainstudio.workers.dev/fknjswt5ac4v65juzuvcwkkqoi
+
 ## How it works
 
 A share's ID is **derived from the video's content**: the first 16 bytes of
