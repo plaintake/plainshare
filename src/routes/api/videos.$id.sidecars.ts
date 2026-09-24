@@ -8,6 +8,8 @@ import { requireProducer } from '@/lib/auth.server'
 import { parseChapters } from '@/lib/chapters'
 import { isVideoId } from '@/lib/ids'
 import { captionsKey, posterKey } from '@/lib/r2keys'
+import { findVideo } from '@/lib/videos.server'
+import { parseExpiresAt, videoState } from '@/lib/visibility'
 import { validateVttOrThrow } from '@/lib/vtt'
 
 const MAX_SIDECAR_TOTAL = 5 * 1024 * 1024 // formData buffers; cap before parsing
@@ -22,7 +24,8 @@ async function partBytes(part: FormDataEntryValue | null): Promise<Uint8Array | 
 
 /**
  * Attach sidecars to an uploaded video: WebVTT captions (stored byte-identical,
- * validated with parseVtt), chapters JSON, a poster JPEG, and a title. Only the
+ * validated with parseVtt), chapters JSON, a poster JPEG, a title, and an
+ * expiry (`expiresAt`: ISO-8601, or `none` to clear). Only the
  * owning producer may write; every part is optional but at least one is
  * required. Re-sending a part is an idempotent overwrite of the same key.
  */
@@ -36,9 +39,12 @@ export const Route = createFileRoute('/api/videos/$id/sidecars')({
         const producer = await requireProducer(request)
         if (producer === null) return errorJson('unauthorized', 401)
 
-        const row = (await db.select().from(videos).where(eq(videos.id, id)).limit(1))[0]
-        if (row === undefined) return errorJson('not-found', 404)
+        const row = await findVideo(id)
+        if (row === null) return errorJson('not-found', 404)
         if (row.producerId !== producer.id) return errorJson('forbidden', 403)
+        // Restore first (POST /restore or a re-PUT); writes never revive a video.
+        const state = videoState(row, new Date())
+        if (state !== 'live') return errorJson(state, 410)
 
         const declaredLength = Number.parseInt(request.headers.get('content-length') ?? '', 10)
         if (Number.isSafeInteger(declaredLength) && declaredLength > MAX_SIDECAR_TOTAL) {
@@ -120,6 +126,18 @@ export const Route = createFileRoute('/api/videos/$id/sidecars')({
           touched += 1
         }
 
+        const expiresAt = form.get('expiresAt')
+        if (typeof expiresAt === 'string' && expiresAt.trim() !== '') {
+          let parsed: Date | 'clear'
+          try {
+            parsed = parseExpiresAt(expiresAt, new Date())
+          } catch {
+            return errorJson('invalid-expires-at', 400)
+          }
+          updates.expiresAt = parsed === 'clear' ? null : parsed
+          touched += 1
+        }
+
         if (touched === 0) return errorJson('no-parts', 400)
 
         await db.update(videos).set(updates).where(eq(videos.id, id))
@@ -128,6 +146,10 @@ export const Route = createFileRoute('/api/videos/$id/sidecars')({
           hasCaptions: (updates.hasCaptions as boolean | undefined) ?? row.hasCaptions,
           hasChapters: updates.chapters !== undefined ? true : row.chapters !== null,
           hasPoster: (updates.hasPoster as boolean | undefined) ?? row.hasPoster,
+          expiresAt:
+            'expiresAt' in updates
+              ? ((updates.expiresAt as Date | null)?.toISOString() ?? null)
+              : (row.expiresAt?.toISOString() ?? null),
         })
       },
     },

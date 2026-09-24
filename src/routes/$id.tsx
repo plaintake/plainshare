@@ -24,8 +24,11 @@ export const Route = createFileRoute('/$id')({
     return data
   },
   head: ({ loaderData }) => ({
-    meta: loaderData
-      ? [
+    meta: !loaderData
+      ? []
+      : 'gone' in loaderData
+        ? [{ title: 'Video unavailable' }, { name: 'robots', content: 'noindex' }]
+        : [
           { title: loaderData.video.title ?? loaderData.video.filename },
           { property: 'og:title', content: loaderData.video.title ?? loaderData.video.filename },
           { property: 'og:type', content: 'video.other' },
@@ -39,14 +42,14 @@ export const Route = createFileRoute('/$id')({
               ? `A video shared with PlainShare by ${loaderData.producer.name}.`
               : 'A video shared with PlainShare.',
           },
-        ]
-      : [],
+        ],
   }),
   component: ShareRoute,
 })
 
 function ShareRoute() {
   const data = Route.useLoaderData()
+  if ('gone' in data) return <GoneShare reason={data.reason} />
   return (
     <ShareViewer
       video={data.video}
@@ -55,5 +58,15 @@ function ShareRoute() {
       chapters={data.chapters}
       initialViews={data.initialViews}
     />
+  )
+}
+
+/** Rendered with a 410: the link was real, the video has been taken down. */
+function GoneShare({ reason }: { reason: 'unpublished' | 'expired' }) {
+  return (
+    <main className="landing">
+      <h1>Video unavailable</h1>
+      <p>{reason === 'expired' ? 'This share link has expired.' : 'This video has been removed.'}</p>
+    </main>
   )
 }

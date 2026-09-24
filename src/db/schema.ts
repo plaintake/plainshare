@@ -27,32 +27,50 @@ export const producers = sqliteTable('producers', {
  * rows are written only after R2 accepted the object with a matching sha256.
  * Captions/poster R2 keys are derived from the id (see src/lib/r2keys.ts), so
  * only presence flags are stored here.
+ *
+ * Row existence is not visibility: `deletedAt` (unpublished) and `expiresAt`
+ * decide whether the video is served — see src/lib/visibility.ts. Tombstoned
+ * rows are purged, with their R2 objects, after a grace period by the cron job
+ * in src/lib/retention.server.ts.
  */
-export const videos = sqliteTable('videos', {
-  /** 26-char lowercase base32 of the first 16 sha256 bytes — content-addressed. */
-  id: text('id').primaryKey(),
-  producerId: text('producer_id')
-    .notNull()
-    .references(() => producers.id),
-  filename: text('filename').notNull(),
-  title: text('title'),
-  width: integer('width'),
-  height: integer('height'),
-  durationMs: integer('duration_ms'),
-  bytes: integer('bytes').notNull(),
-  /** Full 64-hex sha256 of the MP4, kept for audit and ETags. */
-  sha256: text('sha256').notNull(),
-  hasCaptions: integer('has_captions', { mode: 'boolean' }).notNull().default(false),
-  hasPoster: integer('has_poster', { mode: 'boolean' }).notNull().default(false),
-  /** JSON array of {title, startMs, endMs} — see src/lib/chapters.ts. */
-  chapters: text('chapters'),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' })
-    .notNull()
-    .$defaultFn(() => new Date()),
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
-    .notNull()
-    .$defaultFn(() => new Date()),
-})
+export const videos = sqliteTable(
+  'videos',
+  {
+    /** 26-char lowercase base32 of the first 16 sha256 bytes — content-addressed. */
+    id: text('id').primaryKey(),
+    producerId: text('producer_id')
+      .notNull()
+      .references(() => producers.id),
+    filename: text('filename').notNull(),
+    title: text('title'),
+    width: integer('width'),
+    height: integer('height'),
+    durationMs: integer('duration_ms'),
+    bytes: integer('bytes').notNull(),
+    /** Full 64-hex sha256 of the MP4, kept for audit and ETags. */
+    sha256: text('sha256').notNull(),
+    hasCaptions: integer('has_captions', { mode: 'boolean' }).notNull().default(false),
+    hasPoster: integer('has_poster', { mode: 'boolean' }).notNull().default(false),
+    /** JSON array of {title, startMs, endMs} — see src/lib/chapters.ts. */
+    chapters: text('chapters'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    /** Set when unpublished (or when expiry was swept); null = published. */
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
+    /** Who unpublished it — decides who may restore. Null while published. */
+    deletedBy: text('deleted_by', { enum: ['producer', 'admin', 'expired'] }),
+    /** Producer-set TTL; null = never expires. */
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    index('idx_videos_deleted_at').on(table.deletedAt),
+    index('idx_videos_expires_at').on(table.expiresAt),
+  ],
+)
 
 /**
  * Views are events, not a counter: one row per (video, viewer, UTC day).

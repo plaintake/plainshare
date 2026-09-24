@@ -116,15 +116,15 @@ export async function rotateProducerKey(base: string, slug: string): Promise<Pro
   return (await response.json()) as Producer
 }
 
-/** Full protocol: PUT video, then sidecars. Returns the share id. */
-export async function uploadVideo(
+/** The raw MP4 PUT, response unchecked — for asserting on re-PUT statuses. */
+export async function putVideo(
   base: string,
   key: string,
   video: { path: string; sha256: string; id: string; durationMs: number },
-  parts: { captions?: boolean; chapters?: boolean; poster?: boolean } = { captions: true, chapters: true },
-): Promise<string> {
+  headers: Record<string, string> = {},
+): Promise<Response> {
   const bytes = await readFile(video.path)
-  const put = await fetch(`${base}/api/videos/${video.id}`, {
+  return fetch(`${base}/api/videos/${video.id}`, {
     method: 'PUT',
     headers: {
       authorization: `Bearer ${key}`,
@@ -135,9 +135,35 @@ export async function uploadVideo(
       'x-height': '360',
       'x-duration-ms': String(video.durationMs),
       'content-type': 'video/mp4',
+      ...headers,
     },
     body: new Uint8Array(bytes),
   })
+}
+
+/** Admin-triggered retention pass; graceDays 0 purges every tombstone now. */
+export async function runRetention(
+  base: string,
+  graceDays: number,
+): Promise<{ expired: number; purged: number; graceDays: number }> {
+  const response = await fetch(`${base}/api/admin/retention`, {
+    method: 'POST',
+    headers: { 'x-admin-token': await adminToken(), 'content-type': 'application/json' },
+    body: JSON.stringify({ graceDays }),
+  })
+  if (!response.ok) throw new Error(`retention failed: ${response.status}`)
+  return (await response.json()) as { expired: number; purged: number; graceDays: number }
+}
+
+/** Full protocol: PUT video, then sidecars. Returns the share id. */
+export async function uploadVideo(
+  base: string,
+  key: string,
+  video: { path: string; sha256: string; id: string; durationMs: number },
+  parts: { captions?: boolean; chapters?: boolean; poster?: boolean } = { captions: true, chapters: true },
+  headers: Record<string, string> = {},
+): Promise<string> {
+  const put = await putVideo(base, key, video, headers)
   if (!(put.status === 201 || put.status === 200)) {
     throw new Error(`video put failed: ${put.status} ${await put.text()}`)
   }

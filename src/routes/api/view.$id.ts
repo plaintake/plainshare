@@ -1,10 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { count, eq } from 'drizzle-orm'
 import { db } from '@/db'
-import { videos, viewEvents } from '@/db/schema'
+import { viewEvents } from '@/db/schema'
 import { errorJson, json } from '@/lib/api.server'
 import { sha256Hex } from '@/lib/auth.server'
 import { isVideoId } from '@/lib/ids'
+import { findServableVideo } from '@/lib/videos.server'
 
 /**
  * Records a view as an idempotent event: one row per (video, viewer, UTC day).
@@ -16,8 +17,8 @@ export const Route = createFileRoute('/api/view/$id')({
     handlers: {
       POST: async ({ params, request }) => {
         if (!isVideoId(params.id)) return errorJson('invalid-id', 400)
-        const row = (await db.select({ id: videos.id }).from(videos).where(eq(videos.id, params.id)).limit(1))[0]
-        if (row === undefined) return errorJson('not-found', 404)
+        const row = await findServableVideo(params.id)
+        if (row instanceof Response) return row
 
         let viewerId: string | undefined
         try {

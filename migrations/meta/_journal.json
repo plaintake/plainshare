@@ -15,6 +15,13 @@
       "when": 1790153317924,
       "tag": "0001_curved_korg",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790233052364,
+      "tag": "0002_flowery_dexter_bennett",
+      "breakpoints": true
     }
   ]
 }

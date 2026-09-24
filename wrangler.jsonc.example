@@ -10,7 +10,9 @@
 	//   wrangler secret put ADMIN_TOKEN
 	//   pnpm db:migrate:remote && pnpm deploy
 	"name": "plainshare",
-	"main": "@tanstack/react-start/server-entry",
+	// src/server.ts wraps TanStack Start's fetch handler and adds the
+	// scheduled() retention job (see src/lib/retention.server.ts).
+	"main": "src/server.ts",
 	"compatibility_date": "2026-09-01",
 	"compatibility_flags": [
 		"nodejs_compat"
@@ -19,6 +21,14 @@
 		"enabled": true
 	},
 	"upload_source_maps": true,
+	// Daily retention: sweep expired videos, purge tombstones past the grace.
+	"triggers": {
+		"crons": ["17 3 * * *"]
+	},
+	"vars": {
+		// Days an unpublished video stays restorable before it is purged.
+		"PURGE_GRACE_DAYS": "30"
+	},
 	"d1_databases": [
 		{
 			"binding": "DB",

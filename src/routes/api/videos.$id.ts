@@ -7,6 +7,14 @@ import { errorJson, json } from '@/lib/api.server'
 import { requireProducer } from '@/lib/auth.server'
 import { isVideoId, videoIdFromSha256Hex } from '@/lib/ids'
 import { sourceKey } from '@/lib/r2keys'
+import {
+  findServableVideo,
+  findVideo,
+  purgeAfter,
+  requireOwnerOrAdmin,
+  restoreVideo,
+} from '@/lib/videos.server'
+import { parseExpiresAt, videoState } from '@/lib/visibility'
 
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024 // 2 GiB
 
@@ -36,26 +44,25 @@ function sanitizeFilename(raw: string): string {
   return base.slice(0, 200) || 'video.mp4'
 }
 
-async function findVideo(id: string) {
-  const rows = await db.select().from(videos).where(eq(videos.id, id)).limit(1)
-  return rows[0] ?? null
-}
-
 export const Route = createFileRoute('/api/videos/$id')({
   server: {
     handlers: {
-      /** Client dedup probe: row exists means verified bytes are already shared. */
+      /**
+       * Client dedup probe: 200 means verified bytes are already shared and
+       * live; 410 means they are stored but unpublished/expired — a re-PUT by
+       * the owner restores them.
+       */
       HEAD: async ({ params }) => {
         if (!isVideoId(params.id)) return errorJson('invalid-id', 400)
-        const row = await findVideo(params.id)
-        if (row === null) return errorJson('not-found', 404)
+        const row = await findServableVideo(params.id)
+        if (row instanceof Response) return row
         return new Response(null, { status: 200, headers: { 'x-status': 'ready' } })
       },
 
       GET: async ({ params, request }) => {
         if (!isVideoId(params.id)) return errorJson('invalid-id', 400)
-        const row = await findVideo(params.id)
-        if (row === null) return errorJson('not-found', 404)
+        const row = await findServableVideo(params.id)
+        if (row instanceof Response) return row
         const producer = (
           await db.select().from(producers).where(eq(producers.id, row.producerId)).limit(1)
         )[0]
@@ -81,6 +88,7 @@ export const Route = createFileRoute('/api/videos/$id')({
           hasPoster: row.hasPoster,
           views: views.value,
           createdAt: row.createdAt.toISOString(),
+          expiresAt: row.expiresAt?.toISOString() ?? null,
           producer: producer
             ? { name: producer.name, slug: producer.slug, homepageUrl: producer.homepageUrl }
             : null,
@@ -114,13 +122,28 @@ export const Route = createFileRoute('/api/videos/$id')({
         if (!/^[0-9a-f]{64}$/.test(digest)) return errorJson('sha256-required', 400)
         if (videoIdFromSha256Hex(digest) !== id) return errorJson('hash-mismatch', 400)
 
+        let expires: Date | 'clear' | undefined
+        const expiresHeader = headerString(request, 'x-expires-at')
+        if (expiresHeader !== null) {
+          try {
+            expires = parseExpiresAt(expiresHeader, new Date())
+          } catch {
+            return errorJson('invalid-expires-at', 400)
+          }
+        }
+
         const existing = await findVideo(id)
         if (existing !== null) {
-          if (existing.producerId === producer.id) {
-            const origin = new URL(request.url).origin
-            return json({ id, url: `${origin}/${id}`, deduped: true })
+          if (existing.producerId !== producer.id) return errorJson('owned-by-another-producer', 409)
+          // Publishing the same bytes again is the owner's undo: it restores an
+          // unpublished or expired video (admin takedowns excepted).
+          const restored = videoState(existing, new Date()) !== 'live'
+          if (restored || expires !== undefined) {
+            const result = await restoreVideo(existing, { kind: 'producer', producerId: producer.id }, expires)
+            if (result instanceof Response) return result
           }
-          return errorJson('owned-by-another-producer', 409)
+          const origin = new URL(request.url).origin
+          return json({ id, url: `${origin}/${id}`, deduped: true, restored })
         }
 
         if (request.body === null) return errorJson('empty-body', 400)
@@ -150,6 +173,7 @@ export const Route = createFileRoute('/api/videos/$id')({
           durationMs: headerInt(request, 'x-duration-ms'),
           bytes: contentLength,
           sha256: digest,
+          expiresAt: expires instanceof Date ? expires : null,
         }
         try {
           await db.insert(videos).values(row)
@@ -160,11 +184,46 @@ export const Route = createFileRoute('/api/videos/$id')({
           if (raced === null) return errorJson('insert-failed', 500)
           if (raced.producerId !== producer.id) return errorJson('owned-by-another-producer', 409)
           const origin = new URL(request.url).origin
-          return json({ id, url: `${origin}/${id}`, deduped: true })
+          return json({ id, url: `${origin}/${id}`, deduped: true, restored: false })
         }
 
         const origin = new URL(request.url).origin
         return json({ id, url: `${origin}/${id}`, deduped: false }, 201)
+      },
+
+      /**
+       * Unpublish: a tombstone, not a delete. Reads 410 at once; the bytes stay
+       * (restorable via /restore or a re-PUT) until retention purges them after
+       * the grace period. Owner or admin; repeating it is a no-op, except that an
+       * admin takedown supersedes an owner's unpublish — the owner then can no
+       * longer restore.
+       */
+      DELETE: async ({ params, request }) => {
+        if (!isVideoId(params.id)) return errorJson('invalid-id', 400)
+        const row = await findVideo(params.id)
+        if (row === null) return errorJson('not-found', 404)
+        const actor = await requireOwnerOrAdmin(request, row)
+        if (actor instanceof Response) return actor
+
+        let tombstone = row
+        const upgrade = actor.kind === 'admin' && row.deletedBy !== 'admin'
+        if (row.deletedAt === null || upgrade) {
+          const now = new Date()
+          tombstone = (
+            await db
+              .update(videos)
+              .set({ deletedAt: row.deletedAt ?? now, deletedBy: actor.kind, updatedAt: now })
+              .where(eq(videos.id, row.id))
+              .returning()
+          )[0]!
+        }
+        const deletedAt = tombstone.deletedAt!
+        return json({
+          id: tombstone.id,
+          deletedAt: deletedAt.toISOString(),
+          deletedBy: tombstone.deletedBy,
+          purgeAfter: purgeAfter(deletedAt).toISOString(),
+        })
       },
     },
   },

@@ -48,15 +48,18 @@ All API routes live under `/api`. Producers authenticate with a bearer key:
 | `POST` | `/api/producers` | create producer + key (admin-gated) |
 | `POST` | `/api/producers/:slug/reissue` | re-issue a producer's key, same row (admin-gated) |
 | `GET` | `/api/producers/me` | who a bearer key resolves to — verify without uploading |
-| `HEAD` | `/api/videos/:id` | exists? 200 / 404 — dedup probe |
-| `GET` | `/api/videos/:id` | metadata (title, dimensions, views, producer, …) |
-| `PUT` | `/api/videos/:id` | upload the MP4 |
-| `POST` | `/api/videos/:id/sidecars` | attach captions / chapters / poster / title |
+| `HEAD` | `/api/videos/:id` | live? 200 / 404 / 410 — dedup probe |
+| `GET` | `/api/videos/:id` | metadata (title, dimensions, views, producer, expiry, …) |
+| `PUT` | `/api/videos/:id` | upload the MP4 (re-PUT by the owner restores an unpublished one) |
+| `DELETE` | `/api/videos/:id` | unpublish (owner or admin) — purged after the grace period |
+| `POST` | `/api/videos/:id/restore` | undo an unpublish / expiry before the purge |
+| `POST` | `/api/videos/:id/sidecars` | attach captions / chapters / poster / title / expiry |
 | `GET` | `/api/media/:id` | the MP4 (single `Range` supported) |
 | `GET` | `/api/captions/:id` | the WebVTT, byte-identical to what was uploaded |
 | `GET` | `/api/poster/:id` | the poster JPEG |
 | `POST` | `/api/view/:id` | record a view (idempotent per viewer/day) |
 | `GET` | `/:id` | the share page (SSR transcript, player, chapters) |
+| `POST` | `/api/admin/retention` | run the retention pass now (admin-gated) |
 
 ### Create a producer (admin)
 
@@ -143,9 +146,79 @@ curl -X POST "http://localhost:8787/api/videos/$ID/sidecars" \
   no overlaps; missing `endMs` is filled from the next mark).
 - `poster` — JPEG (magic bytes checked).
 - `title` — form field, ≤200 chars.
+- `expiresAt` — form field: an ISO-8601 instant in the future, or `none` to
+  clear the expiry.
 
 All parts optional, at least one required. Only the owning producer may call
 this (`403` otherwise).
+
+### Unpublish, restore, expiry
+
+Unpublishing is a **tombstone**, not a delete. The share page, metadata,
+media, captions, poster and view endpoints answer `410 Gone` right away
+(`{"error":"unpublished"}`; the page renders "Video unavailable" with a 410
+and `noindex`). The bytes stay put, and the video can be restored, until
+retention purges it after the grace period (below).
+
+```sh
+curl -X DELETE "http://localhost:8787/api/videos/$ID" \
+  -H "Authorization: Bearer $KEY"
+```
+
+`200 {"id":…,"deletedAt":…,"deletedBy":"producer","purgeAfter":…}`. Repeating it
+is a no-op. Another producer's key gets `403`. The admin can take down any
+video with `-H "X-Admin-Token: $ADMIN_TOKEN"` instead (`deletedBy: "admin"`).
+
+Undo it before `purgeAfter`, either explicitly or by publishing the same bytes
+again (the `PUT` answers `{"deduped":true,"restored":true}`):
+
+```sh
+curl -X POST "http://localhost:8787/api/videos/$ID/restore" \
+  -H "Authorization: Bearer $KEY" \
+  -H 'content-type: application/json' -d '{"expiresAt":"none"}'   # body optional
+```
+
+Only the admin can undo an **admin takedown**. The owner's restore and re-`PUT`
+both get `403 {"error":"taken-down"}`.
+
+**Expiry.** A producer can give a video a TTL with `X-Expires-At: <ISO-8601>`
+on the `PUT`, or an `expiresAt` sidecar field (`none` clears it). Once the
+instant passes, every read path answers `410 {"error":"expired"}` straight
+away; it doesn't wait for the sweep. After that it follows the same grace-then-purge
+path as an unpublish, and it can be restored the same way (a past expiry is
+cleared on restore).
+
+### Retention
+
+A daily cron (`triggers.crons` in `wrangler.jsonc`, 03:17 UTC) runs
+`src/lib/retention.server.ts`:
+
+1. **Expire.** Videos past `expiresAt` become tombstones dated at their
+   expiry, so the grace period counts from when they went dark.
+2. **Purge.** Tombstones older than `PURGE_GRACE_DAYS` (a `wrangler.jsonc`
+   var, default `30`) lose their R2 objects, their `view_events` and their row,
+   up to 100 per run. R2 is deleted first, so a failed run is retried the next
+   day and never leaves objects without a row.
+
+After a purge the id is free again. The same bytes upload fresh (`201`), by
+anyone.
+
+Run the pass now (after an abuse takedown, say). `graceDays` overrides the
+configured grace for this run only, and `0` purges every tombstone:
+
+```sh
+curl -X POST http://localhost:8787/api/admin/retention \
+  -H "X-Admin-Token: $ADMIN_TOKEN" \
+  -H 'content-type: application/json' -d '{"graceDays":0}'
+```
+
+`200 {"expired":…,"purged":…,"graceDays":…}`. Locally, the cron itself fires
+with `curl -X POST http://localhost:8787/cdn-cgi/handler/scheduled`.
+
+**Caching caveat.** Media, captions and posters are served `immutable` for a
+year: an id's bytes can never change, so that is safe. It also means a
+browser that already fetched a video may keep its copy after an unpublish.
+The 410 stops new fetches; it can't recall old ones.
 
 ## No CORS — by design
 
@@ -171,7 +244,7 @@ Local state (D1 + R2) lives under `.wrangler/state`; delete it and re-run
 migrations for a clean slate.
 
 ```sh
-pnpm test          # unit tests (ids / vtt / chapters)
+pnpm test          # unit tests (ids / vtt / chapters / visibility)
 pnpm test:e2e      # Playwright against the dev server (needs ffmpeg)
 pnpm typecheck
 pnpm build
@@ -205,9 +278,11 @@ When `migrations/` gains files, run `pnpm db:migrate:remote` **before**
 
 ```text
 src/routes/api/       API endpoints (server handlers)
-src/routes/$id.tsx    the share page (SSR loader → ShareViewer)
+src/routes/$id.tsx    the share page (SSR loader → ShareViewer, or the 410 notice)
+src/server.ts         worker entry: Start's fetch (+ 410 for gone shares) and the retention cron
 src/components/       player, transcript, chapters, view counter
-src/lib/              ids, vtt parsing, chapter validation, auth, R2 keys
+src/lib/              ids, vtt parsing, chapter validation, auth, R2 keys,
+                      visibility (live / unpublished / expired), retention
 src/db/               drizzle schema (producers, videos, viewEvents)
 migrations/           generated D1 migrations (wrangler applies them)
 test/e2e/             Playwright suite (real ffmpeg clips)

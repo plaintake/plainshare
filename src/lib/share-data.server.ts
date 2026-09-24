@@ -2,10 +2,12 @@ import { count, eq } from 'drizzle-orm'
 import { env } from 'cloudflare:workers'
 import { getRequestUrl } from '@tanstack/react-start/server'
 import { db } from '@/db'
-import { producers, viewEvents, videos } from '@/db/schema'
+import { producers, viewEvents } from '@/db/schema'
 import type { Chapter } from '@/lib/chapters'
 import { isVideoId } from '@/lib/ids'
 import { captionsKey } from '@/lib/r2keys'
+import { findVideo } from '@/lib/videos.server'
+import { videoState, type GoneShare } from '@/lib/visibility'
 import { parseVtt, type VttCue } from '@/lib/vtt'
 
 export type ShareData = {
@@ -33,10 +35,14 @@ export type ShareData = {
  * The .server.ts suffix keeps this module — and its `cloudflare:workers`
  * imports — out of the client bundle entirely.
  */
-export async function loadShareData(id: string): Promise<ShareData | null> {
+export async function loadShareData(id: string): Promise<ShareData | GoneShare | null> {
   if (!isVideoId(id)) return null
-  const row = (await db.select().from(videos).where(eq(videos.id, id)).limit(1))[0]
-  if (row === undefined) return null
+  const row = await findVideo(id)
+  if (row === null) return null
+  const state = videoState(row, new Date())
+  // The page renders a "no longer available" notice; src/server.ts turns
+  // this shape into the response's 410.
+  if (state !== 'live') return { gone: true, reason: state }
 
   let cues: VttCue[] = []
   if (row.hasCaptions) {

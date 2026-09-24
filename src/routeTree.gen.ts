@@ -20,7 +20,9 @@ import { Route as ApiProducersMeRouteImport } from './routes/api/producers.me'
 import { Route as ApiPosterIdRouteImport } from './routes/api/poster.$id'
 import { Route as ApiMediaIdRouteImport } from './routes/api/media.$id'
 import { Route as ApiCaptionsIdRouteImport } from './routes/api/captions.$id'
+import { Route as ApiAdminRetentionRouteImport } from './routes/api/admin.retention'
 import { Route as ApiVideosIdSidecarsRouteImport } from './routes/api/videos.$id.sidecars'
+import { Route as ApiVideosIdRestoreRouteImport } from './routes/api/videos.$id.restore'
 import { Route as ApiProducersSlugReissueRouteImport } from './routes/api/producers.$slug.reissue'
 
 const IdRoute = IdRouteImport.update({
@@ -78,9 +80,19 @@ const ApiCaptionsIdRoute = ApiCaptionsIdRouteImport.update({
   path: '/api/captions/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminRetentionRoute = ApiAdminRetentionRouteImport.update({
+  id: '/api/admin/retention',
+  path: '/api/admin/retention',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiVideosIdSidecarsRoute = ApiVideosIdSidecarsRouteImport.update({
   id: '/sidecars',
   path: '/sidecars',
+  getParentRoute: () => ApiVideosIdRoute,
+} as any)
+const ApiVideosIdRestoreRoute = ApiVideosIdRestoreRouteImport.update({
+  id: '/restore',
+  path: '/restore',
   getParentRoute: () => ApiVideosIdRoute,
 } as any)
 const ApiProducersSlugReissueRoute = ApiProducersSlugReissueRouteImport.update({
@@ -95,6 +107,7 @@ export interface FileRoutesByFullPath {
   '/api/ping': typeof ApiPingRoute
   '/api/producers': typeof ApiProducersRouteWithChildren
   '/api/version': typeof ApiVersionRoute
+  '/api/admin/retention': typeof ApiAdminRetentionRoute
   '/api/captions/$id': typeof ApiCaptionsIdRoute
   '/api/media/$id': typeof ApiMediaIdRoute
   '/api/poster/$id': typeof ApiPosterIdRoute
@@ -102,6 +115,7 @@ export interface FileRoutesByFullPath {
   '/api/videos/$id': typeof ApiVideosIdRouteWithChildren
   '/api/view/$id': typeof ApiViewIdRoute
   '/api/producers/$slug/reissue': typeof ApiProducersSlugReissueRoute
+  '/api/videos/$id/restore': typeof ApiVideosIdRestoreRoute
   '/api/videos/$id/sidecars': typeof ApiVideosIdSidecarsRoute
 }
 export interface FileRoutesByTo {
@@ -110,6 +124,7 @@ export interface FileRoutesByTo {
   '/api/ping': typeof ApiPingRoute
   '/api/producers': typeof ApiProducersRouteWithChildren
   '/api/version': typeof ApiVersionRoute
+  '/api/admin/retention': typeof ApiAdminRetentionRoute
   '/api/captions/$id': typeof ApiCaptionsIdRoute
   '/api/media/$id': typeof ApiMediaIdRoute
   '/api/poster/$id': typeof ApiPosterIdRoute
@@ -117,6 +132,7 @@ export interface FileRoutesByTo {
   '/api/videos/$id': typeof ApiVideosIdRouteWithChildren
   '/api/view/$id': typeof ApiViewIdRoute
   '/api/producers/$slug/reissue': typeof ApiProducersSlugReissueRoute
+  '/api/videos/$id/restore': typeof ApiVideosIdRestoreRoute
   '/api/videos/$id/sidecars': typeof ApiVideosIdSidecarsRoute
 }
 export interface FileRoutesById {
@@ -126,6 +142,7 @@ export interface FileRoutesById {
   '/api/ping': typeof ApiPingRoute
   '/api/producers': typeof ApiProducersRouteWithChildren
   '/api/version': typeof ApiVersionRoute
+  '/api/admin/retention': typeof ApiAdminRetentionRoute
   '/api/captions/$id': typeof ApiCaptionsIdRoute
   '/api/media/$id': typeof ApiMediaIdRoute
   '/api/poster/$id': typeof ApiPosterIdRoute
@@ -133,6 +150,7 @@ export interface FileRoutesById {
   '/api/videos/$id': typeof ApiVideosIdRouteWithChildren
   '/api/view/$id': typeof ApiViewIdRoute
   '/api/producers/$slug/reissue': typeof ApiProducersSlugReissueRoute
+  '/api/videos/$id/restore': typeof ApiVideosIdRestoreRoute
   '/api/videos/$id/sidecars': typeof ApiVideosIdSidecarsRoute
 }
 export interface FileRouteTypes {
@@ -143,6 +161,7 @@ export interface FileRouteTypes {
     | '/api/ping'
     | '/api/producers'
     | '/api/version'
+    | '/api/admin/retention'
     | '/api/captions/$id'
     | '/api/media/$id'
     | '/api/poster/$id'
@@ -150,6 +169,7 @@ export interface FileRouteTypes {
     | '/api/videos/$id'
     | '/api/view/$id'
     | '/api/producers/$slug/reissue'
+    | '/api/videos/$id/restore'
     | '/api/videos/$id/sidecars'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -158,6 +178,7 @@ export interface FileRouteTypes {
     | '/api/ping'
     | '/api/producers'
     | '/api/version'
+    | '/api/admin/retention'
     | '/api/captions/$id'
     | '/api/media/$id'
     | '/api/poster/$id'
@@ -165,6 +186,7 @@ export interface FileRouteTypes {
     | '/api/videos/$id'
     | '/api/view/$id'
     | '/api/producers/$slug/reissue'
+    | '/api/videos/$id/restore'
     | '/api/videos/$id/sidecars'
   id:
     | '__root__'
@@ -173,6 +195,7 @@ export interface FileRouteTypes {
     | '/api/ping'
     | '/api/producers'
     | '/api/version'
+    | '/api/admin/retention'
     | '/api/captions/$id'
     | '/api/media/$id'
     | '/api/poster/$id'
@@ -180,6 +203,7 @@ export interface FileRouteTypes {
     | '/api/videos/$id'
     | '/api/view/$id'
     | '/api/producers/$slug/reissue'
+    | '/api/videos/$id/restore'
     | '/api/videos/$id/sidecars'
   fileRoutesById: FileRoutesById
 }
@@ -189,6 +213,7 @@ export interface RootRouteChildren {
   ApiPingRoute: typeof ApiPingRoute
   ApiProducersRoute: typeof ApiProducersRouteWithChildren
   ApiVersionRoute: typeof ApiVersionRoute
+  ApiAdminRetentionRoute: typeof ApiAdminRetentionRoute
   ApiCaptionsIdRoute: typeof ApiCaptionsIdRoute
   ApiMediaIdRoute: typeof ApiMediaIdRoute
   ApiPosterIdRoute: typeof ApiPosterIdRoute
@@ -275,11 +300,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCaptionsIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/retention': {
+      id: '/api/admin/retention'
+      path: '/api/admin/retention'
+      fullPath: '/api/admin/retention'
+      preLoaderRoute: typeof ApiAdminRetentionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/videos/$id/sidecars': {
       id: '/api/videos/$id/sidecars'
       path: '/sidecars'
       fullPath: '/api/videos/$id/sidecars'
       preLoaderRoute: typeof ApiVideosIdSidecarsRouteImport
+      parentRoute: typeof ApiVideosIdRoute
+    }
+    '/api/videos/$id/restore': {
+      id: '/api/videos/$id/restore'
+      path: '/restore'
+      fullPath: '/api/videos/$id/restore'
+      preLoaderRoute: typeof ApiVideosIdRestoreRouteImport
       parentRoute: typeof ApiVideosIdRoute
     }
     '/api/producers/$slug/reissue': {
@@ -307,10 +346,12 @@ const ApiProducersRouteWithChildren = ApiProducersRoute._addFileChildren(
 )
 
 interface ApiVideosIdRouteChildren {
+  ApiVideosIdRestoreRoute: typeof ApiVideosIdRestoreRoute
   ApiVideosIdSidecarsRoute: typeof ApiVideosIdSidecarsRoute
 }
 
 const ApiVideosIdRouteChildren: ApiVideosIdRouteChildren = {
+  ApiVideosIdRestoreRoute: ApiVideosIdRestoreRoute,
   ApiVideosIdSidecarsRoute: ApiVideosIdSidecarsRoute,
 }
 
@@ -324,6 +365,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPingRoute: ApiPingRoute,
   ApiProducersRoute: ApiProducersRouteWithChildren,
   ApiVersionRoute: ApiVersionRoute,
+  ApiAdminRetentionRoute: ApiAdminRetentionRoute,
   ApiCaptionsIdRoute: ApiCaptionsIdRoute,
   ApiMediaIdRoute: ApiMediaIdRoute,
   ApiPosterIdRoute: ApiPosterIdRoute,
