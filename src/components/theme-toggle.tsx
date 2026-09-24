@@ -24,10 +24,12 @@ function storeTheme(theme: Theme): void {
  * before first paint by the inline script in the root route's head — so this
  * component only reads it, flips it, and persists the choice.
  *
- * Rendered once in the root shell and fixed to the bottom-left corner:
- * theming is not part of watching a video, so the toggle stays out of every
- * page's flow, and bottom-left is the one corner nothing else claims (the
- * share page's right edge is side panels, top to bottom).
+ * Rendered once in the root shell and, on wide layouts, fixed to the
+ * bottom-left corner: theming is not part of watching a video, so the toggle
+ * stays out of every page's flow, and bottom-left is the one corner nothing
+ * else claims (the share page's right edge is side panels, top to bottom).
+ * When the layout stacks, the transcript takes that edge, so the stylesheet
+ * moves the toggle into the flow at the end of the page instead.
  *
  * The icon renders after mount: the server cannot know the theme (the
  * visitor's machine chooses it), and an icon that is wrong for one frame is

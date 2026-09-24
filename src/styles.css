@@ -244,7 +244,8 @@ a:hover {
  * out of the page's flow. Bottom-left specifically — the right edge belongs
  * to the side panels (Chapters above Transcript) all the way down the share
  * page, while the left column ends after the meta row, leaving this corner
- * empty on every page.
+ * empty on wide layouts. Once the layout stacks (see the media query below)
+ * that corner is no longer empty.
  */
 .theme-toggle {
   position: fixed;
@@ -272,4 +273,25 @@ a:hover {
 .theme-toggle:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/*
+ * Stacked layout: the transcript (and, on a landscape phone, the player's
+ * caption area) runs down the left edge, so a fixed button would sit on top
+ * of it. Drop into the flow instead — the toggle renders after the page
+ * content, so it lands at the very end, aligned with the page's padding.
+ */
+@media (max-width: 960px) {
+  .theme-toggle {
+    position: static;
+    margin: -4px 0 24px 24px;
+  }
+
+  /* The landing text ends in a bare paragraph, not a padded page, so it needs
+     real separation — and its column is centered, so follow its left edge
+     (max-width 640px, 24px padding) rather than the viewport's. */
+  .landing + .theme-toggle {
+    margin-top: 32px;
+    margin-left: max(24px, calc((100% - 640px) / 2 + 24px));
+  }
 }
